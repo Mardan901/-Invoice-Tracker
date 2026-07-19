@@ -1,0 +1,618 @@
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
+import java.awt.*;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.io.File;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Properties;
+import javax.swing.JFormattedTextField.AbstractFormatter;
+import org.jdatepicker.impl.JDatePanelImpl;
+import org.jdatepicker.impl.JDatePickerImpl;
+import org.jdatepicker.impl.UtilDateModel;
+
+public class InvoiceApp {
+    //UI Creation
+    private JFrame frame;
+    private JTable table;
+    private DefaultTableModel tableModel;
+    private TableRowSorter<DefaultTableModel> sorter;
+    private InvoiceManager manager;
+    private JLabel totalPaidLabel, totalUnpaidLabel;
+
+    private JLabel titleLabel;
+    private JLabel logoLabel;
+    private ImageIcon originalLogo; 
+
+    private int currentFontSize = 14; 
+    //calling methods inside constructor to avoid static error
+    public InvoiceApp() {
+        manager = new InvoiceManager();
+        initializeUI();
+        refreshTableData();
+        applyZoom(); 
+    }
+    //adding GUI function & making UI look clean
+    private void initializeUI() {
+        //Top panel
+        frame = new JFrame("JNG Resources - Invoice Tracker v2.9");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(1250, 600); 
+        frame.setLayout(new BorderLayout(10, 10));
+
+        JPanel topWrapper = new JPanel(new BorderLayout());
+        topWrapper.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 10)); 
+
+        JPanel controlsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        controlsPanel.add(new JLabel("Search: "));
+        JTextField searchField = new JTextField(15);
+        controlsPanel.add(searchField);
+
+        controlsPanel.add(new JLabel("  Filter: "));
+        String[] filters = {"Semua", "Paid", "Partial", "Unpaid"}; 
+        JComboBox<String> filterBox = new JComboBox<>(filters);
+        controlsPanel.add(filterBox);
+
+        JButton btnAdd = new JButton("+ Add Invoice");
+        JButton btnEdit = new JButton("Edit / Delete");
+        JButton btnPayment = new JButton("Update Payment");
+
+        controlsPanel.add(btnAdd);
+        controlsPanel.add(btnEdit);
+        controlsPanel.add(btnPayment);
+
+        topWrapper.add(controlsPanel, BorderLayout.WEST);
+
+        JPanel brandingPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
+        titleLabel = new JLabel("SUMMARY INVOICE OUT");
+        titleLabel.setForeground(new Color(40, 40, 100)); 
+
+        logoLabel = new JLabel();
+        //insert logo and put plaintext if no logo found
+        try {
+            File logoFile = new File("logo.jpg"); 
+            if (logoFile.exists()) {
+                originalLogo = new ImageIcon("logo.jpg"); 
+
+                Image scaledImage = originalLogo.getImage().getScaledInstance(150, 50, Image.SCALE_SMOOTH);
+                logoLabel.setIcon(new ImageIcon(scaledImage));
+
+            } else {
+                logoLabel.setText("[LOGO]"); 
+                logoLabel.setForeground(Color.GRAY);
+            }
+        } catch (Exception e) {
+            logoLabel.setText("[LOGO]");
+        }
+
+        brandingPanel.add(titleLabel);
+        brandingPanel.add(logoLabel);
+
+        topWrapper.add(brandingPanel, BorderLayout.EAST);
+        frame.add(topWrapper, BorderLayout.NORTH);
+
+        // Table setup
+        String[] columns = {"Date", "Invoice ID", "Job No", "Customer", "Description", "Total (RM)", "Paid (RM)", "Balance (RM)", "Status", "Paid Date", "Remark"};
+        tableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) { return false; }
+        };
+
+        table = new JTable(tableModel);
+        sorter = new TableRowSorter<>(tableModel);
+        table.setRowSorter(sorter);
+        setupTableColors();
+
+        JScrollPane scrollPane = new JScrollPane(table);
+        frame.add(scrollPane, BorderLayout.CENTER);
+
+        // Bottom Panel
+        JPanel bottomPanel = new JPanel(new BorderLayout());
+        JPanel zoomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton btnZoomOut = new JButton("➖"); 
+        JButton btnZoomIn = new JButton("➕");
+        btnZoomOut.setMargin(new Insets(2, 6, 2, 6));
+        btnZoomIn.setMargin(new Insets(2, 6, 2, 6));
+        zoomPanel.add(new JLabel("Zoom: "));
+        zoomPanel.add(btnZoomOut);
+        zoomPanel.add(btnZoomIn);
+        bottomPanel.add(zoomPanel, BorderLayout.WEST); 
+
+        JPanel totalsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        totalPaidLabel = new JLabel("Total Collected: RM 0.00  |  ");
+        totalPaidLabel.setForeground(new Color(0, 150, 0));
+        totalUnpaidLabel = new JLabel("Total Outstanding: RM 0.00");
+        totalUnpaidLabel.setForeground(Color.RED);
+        totalsPanel.add(totalPaidLabel);
+        totalsPanel.add(totalUnpaidLabel);
+        bottomPanel.add(totalsPanel, BorderLayout.EAST); 
+        frame.add(bottomPanel, BorderLayout.SOUTH);
+
+        //Zoom Functionality
+        btnZoomIn.addActionListener(e -> { 
+                    if (currentFontSize < 28) 
+                    { currentFontSize += 2; applyZoom();
+                    } });
+        btnZoomOut.addActionListener(e -> { 
+                    if (currentFontSize > 10) 
+                    { currentFontSize -= 2; applyZoom();
+                    } });
+
+        btnAdd.addActionListener(e -> showAddInvoiceDialog());
+        btnEdit.addActionListener(e -> showEditInvoiceDialog());
+        btnPayment.addActionListener(e -> showPaymentDialog());
+
+        searchField.addKeyListener(new KeyAdapter() {
+                @Override
+                public void keyReleased(KeyEvent e) {
+                    String text = searchField.getText();
+                    if (text.trim().length() == 0) sorter.setRowFilter(null);
+                    else sorter.setRowFilter(RowFilter.regexFilter("(?i)" + text));
+                }
+            });
+
+        filterBox.addActionListener(e -> {
+                    if (filterBox.getSelectedIndex() == 0) sorter.setRowFilter(null);
+                    else sorter.setRowFilter(RowFilter.regexFilter((String) filterBox.getSelectedItem()));
+            });
+
+        frame.setVisible(true);
+    }
+    //dialog box for add invoice button
+    private void showAddInvoiceDialog() {
+        //Top Panel
+        JFrame dialog = new JFrame("New Invoice Setup");
+        dialog.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        dialog.setSize(550, 650); 
+        dialog.setResizable(true); 
+        dialog.setLayout(new BorderLayout(10, 10));
+
+        JDatePickerImpl datePicker = createVisualDatePicker(null); 
+        JTextField idPart1 = new JTextField(6); 
+        JTextField idPart2 = new JTextField(4); 
+        JPanel idPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        idPanel.add(new JLabel("JNG"));
+        idPanel.add(idPart1);
+        idPanel.add(new JLabel("/INV/"));
+        idPanel.add(idPart2);
+
+        JTextField jobNoField = new JTextField();
+        JComboBox<String> nameField = createCustomerDropdown(null); 
+        JTextField descField = new JTextField();
+        JTextField amountField = new JTextField();
+        JTextField remarkField = new JTextField();
+
+        JPanel mainFormPanel = new JPanel();
+        mainFormPanel.setLayout(new BoxLayout(mainFormPanel, BoxLayout.Y_AXIS));
+        mainFormPanel.setBorder(BorderFactory.createEmptyBorder(15, 20, 15, 20));
+
+        Component[][] fields = {
+                {new JLabel("Date:"), datePicker},
+                {new JLabel("Invoice ID:"), idPanel},
+                {new JLabel("Job No:"), jobNoField},
+                {new JLabel("Customer Name:"), nameField},
+                {new JLabel("Description:"), descField},
+                {new JLabel("Total Amount (RM):"), amountField},
+                {new JLabel("Remark:"), remarkField}
+            };
+
+        for (Component[] row : fields) {
+            //Dynamically adjusts maximum height based on the current font size
+            JPanel rowPanel = new JPanel(new BorderLayout(5, 5)) {
+                    @Override
+                    public Dimension getMaximumSize() {
+                        // Let the component decide how tall it needs to be, but let it stretch wide
+                        return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+                    }
+                };
+
+            rowPanel.add(row[0], BorderLayout.NORTH);
+            rowPanel.add(row[1], BorderLayout.CENTER);
+            mainFormPanel.add(rowPanel);
+            mainFormPanel.add(Box.createVerticalStrut(10)); 
+        }
+
+        JScrollPane formScroll = new JScrollPane(mainFormPanel);
+        dialog.add(formScroll, BorderLayout.CENTER);
+        //Bottom Panel
+        JPanel actionButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        JButton btnSave = new JButton("Save Invoice");
+        JButton btnCancel = new JButton("Cancel");
+        actionButtonPanel.add(btnCancel);
+        actionButtonPanel.add(btnSave);
+        dialog.add(actionButtonPanel, BorderLayout.SOUTH);
+
+        updateComponentFont(dialog, currentFontSize);
+
+        btnCancel.addActionListener(e -> dialog.dispose());
+
+        btnSave.addActionListener(e -> {
+                    try {
+                        double amt = Double.parseDouble(amountField.getText());
+                        String fullInvoiceId = "JNG" + idPart1.getText().trim() + "/INV/" + idPart2.getText().trim();
+                        String selectedCustomer = nameField.getSelectedItem().toString();
+                        String finalDateString = datePicker.getJFormattedTextField().getText();
+
+                        manager.addNewInvoice(finalDateString, fullInvoiceId, jobNoField.getText(), selectedCustomer, descField.getText(), amt, remarkField.getText());
+                        refreshTableData();
+                        dialog.dispose(); 
+                    } catch (NumberFormatException ex) {
+                        JOptionPane.showMessageDialog(dialog, "Error: Amount must be a valid number!", "Entry Warning", JOptionPane.WARNING_MESSAGE);
+                    }
+            });
+
+        dialog.setLocationRelativeTo(frame); 
+        dialog.setVisible(true);
+        double amt = roundToTwoDecimals(Double.parseDouble(amountField.getText()));
+    }
+    //dialog box for edit invoice
+    private void showEditInvoiceDialog() {
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow < 0) {
+            JOptionPane.showMessageDialog(frame, "Please select an invoice first.");
+            return;
+        }
+        //Top Panel
+        JFrame dialog = new JFrame("Modify Invoice Details");
+        dialog.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        dialog.setSize(550, 650);
+        dialog.setResizable(true);
+        dialog.setLayout(new BorderLayout(10, 10));
+
+        String oldId = table.getValueAt(selectedRow, 1).toString();
+        JDatePickerImpl datePicker = createVisualDatePicker(table.getValueAt(selectedRow, 0).toString());
+
+        JTextField idField = new JTextField(oldId);
+        JTextField jobNoField = new JTextField(table.getValueAt(selectedRow, 2).toString());
+        JComboBox<String> nameField = createCustomerDropdown(table.getValueAt(selectedRow, 3).toString());
+        JTextField descField = new JTextField(table.getValueAt(selectedRow, 4).toString());
+        JTextField amountField = new JTextField(table.getValueAt(selectedRow, 5).toString());
+        JTextField paidField = new JTextField(table.getValueAt(selectedRow, 6).toString()); 
+        JTextField remarkField = new JTextField(table.getValueAt(selectedRow, 10).toString());
+
+        JPanel mainFormPanel = new JPanel();
+        mainFormPanel.setLayout(new BoxLayout(mainFormPanel, BoxLayout.Y_AXIS));
+        mainFormPanel.setBorder(BorderFactory.createEmptyBorder(15, 20, 15, 20));
+
+        Component[][] fields = {
+                {new JLabel("Date:"), datePicker},
+                {new JLabel("Invoice ID:"), idField},
+                {new JLabel("Job No:"), jobNoField},
+                {new JLabel("Customer Name:"), nameField},
+                {new JLabel("Description:"), descField},
+                {new JLabel("Total Amount (RM):"), amountField},
+                {new JLabel("Amount Paid (RM):"), paidField},
+                {new JLabel("Remark:"), remarkField}
+            };
+
+        for (Component[] row : fields) {
+            
+            JPanel rowPanel = new JPanel(new BorderLayout(5, 5)) {
+                    @Override
+                    public Dimension getMaximumSize() {
+                        
+                        return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+                    }
+                };
+
+            rowPanel.add(row[0], BorderLayout.NORTH);
+            rowPanel.add(row[1], BorderLayout.CENTER);
+            mainFormPanel.add(rowPanel);
+            mainFormPanel.add(Box.createVerticalStrut(10)); 
+        }
+        //Bottom Panel
+        JScrollPane formScroll = new JScrollPane(mainFormPanel);
+        dialog.add(formScroll, BorderLayout.CENTER);
+
+        JPanel actionButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        JButton btnSave = new JButton("Save Changes");
+        JButton btnDelete = new JButton("Delete Invoice");
+        JButton btnCancel = new JButton("Cancel");
+
+        btnDelete.setBackground(new Color(220, 50, 50)); 
+        btnDelete.setForeground(Color.WHITE);
+
+        actionButtonPanel.add(btnDelete);
+        actionButtonPanel.add(btnCancel);
+        actionButtonPanel.add(btnSave);
+        dialog.add(actionButtonPanel, BorderLayout.SOUTH);
+
+        updateComponentFont(dialog, currentFontSize);
+
+        btnCancel.addActionListener(e -> dialog.dispose());
+
+        btnSave.addActionListener(e -> {
+                    try {
+                        double amt = Double.parseDouble(amountField.getText());
+                        double paid = Double.parseDouble(paidField.getText());
+                        String selectedCustomer = nameField.getSelectedItem().toString();
+                        String finalDateString = datePicker.getJFormattedTextField().getText();
+
+                        manager.updateInvoice(oldId, finalDateString, idField.getText(), jobNoField.getText(), selectedCustomer, descField.getText(), amt, paid, remarkField.getText());
+                        refreshTableData();
+                        dialog.dispose();
+                    } catch (NumberFormatException ex) {
+                        JOptionPane.showMessageDialog(dialog, "Error: Amounts must be numbers!");
+                    }
+            });
+
+        btnDelete.addActionListener(e -> {
+                    int confirmDelete = JOptionPane.showConfirmDialog(dialog, "Are you sure you want to PERMANENTLY delete Invoice " + oldId + "?", "Confirm System Wiping", JOptionPane.YES_NO_OPTION, JOptionPane.ERROR_MESSAGE);
+                    if (confirmDelete == JOptionPane.YES_OPTION) {
+                        manager.deleteInvoice(oldId);
+                        refreshTableData();
+                        dialog.dispose();
+                    }
+            });
+
+        dialog.setLocationRelativeTo(frame);
+        dialog.setVisible(true);
+        double amt = roundToTwoDecimals(Double.parseDouble(amountField.getText()));
+    }
+    //Dialog box for update payment
+    private void showPaymentDialog() {
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow < 0) {
+            JOptionPane.showMessageDialog(frame, "Please select an invoice first.");
+            return;
+        }
+
+        String targetId = table.getValueAt(selectedRow, 1).toString(); 
+        String totalAmt = table.getValueAt(selectedRow, 5).toString();
+        String currentPaid = table.getValueAt(selectedRow, 6).toString();
+        String oldDate = table.getValueAt(selectedRow, 9).toString();
+        //top panel
+        JFrame dialog = new JFrame("Record Payment - " + targetId);
+        dialog.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        dialog.setSize(450, 350); 
+        dialog.setResizable(true); 
+        dialog.setLayout(new BorderLayout(10, 10));
+
+        JTextField payField = new JTextField(currentPaid);
+        JDatePickerImpl datePicker = createVisualDatePicker(oldDate);
+
+        JPanel mainFormPanel = new JPanel();
+        mainFormPanel.setLayout(new BoxLayout(mainFormPanel, BoxLayout.Y_AXIS));
+        mainFormPanel.setBorder(BorderFactory.createEmptyBorder(15, 20, 15, 20));
+
+        JLabel infoLabel = new JLabel("<html><b>Total Invoice Amount:</b> RM " + totalAmt + "</html>");
+        JPanel infoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        infoPanel.add(infoLabel);
+        infoPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+
+        mainFormPanel.add(infoPanel);
+        mainFormPanel.add(Box.createVerticalStrut(15)); 
+
+        Component[][] fields = {
+                {new JLabel("Enter Total Amount Paid So Far (RM):"), payField},
+                {new JLabel("Date of Payment:"), datePicker}
+            };
+
+        for (Component[] row : fields) {
+            
+            JPanel rowPanel = new JPanel(new BorderLayout(5, 5)) {
+                    @Override
+                    public Dimension getMaximumSize() {
+                        
+                        return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+                    }
+                };
+
+            rowPanel.add(row[0], BorderLayout.NORTH);
+            rowPanel.add(row[1], BorderLayout.CENTER);
+            mainFormPanel.add(rowPanel);
+            mainFormPanel.add(Box.createVerticalStrut(10)); 
+        }
+
+        JScrollPane formScroll = new JScrollPane(mainFormPanel);
+        dialog.add(formScroll, BorderLayout.CENTER);
+        //bottom panel
+        JPanel actionButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        JButton btnSave = new JButton("Save Payment");
+        JButton btnCancel = new JButton("Cancel");
+        actionButtonPanel.add(btnCancel);
+        actionButtonPanel.add(btnSave);
+        dialog.add(actionButtonPanel, BorderLayout.SOUTH);
+
+        updateComponentFont(dialog, currentFontSize);
+
+        btnCancel.addActionListener(e -> dialog.dispose());
+
+        btnSave.addActionListener(e -> {
+                    try {
+                        double newPaid = Double.parseDouble(payField.getText());
+                        String dateString = datePicker.getJFormattedTextField().getText();
+                        manager.updatePayment(targetId, newPaid, dateString.trim().isEmpty() ? "-" : dateString);
+                        refreshTableData();
+                        dialog.dispose(); 
+                    } catch (NumberFormatException ex) {
+                        JOptionPane.showMessageDialog(dialog, "Error: Amount must be a valid number!", "Entry Warning", JOptionPane.WARNING_MESSAGE);
+                    }
+            });
+
+        dialog.setLocationRelativeTo(frame);
+        dialog.setVisible(true);
+    }
+
+    private void refreshTableData() {
+        tableModel.setRowCount(0); 
+        double totalCollected = 0, totalOutstanding = 0;
+
+        for (Invoice inv : manager.getAllInvoices()) {
+            double balance = inv.getAmount() - inv.getAmountPaid();
+
+            Object[] row = {
+                    inv.getDate(), inv.getInvoiceId(), inv.getJobNo(), 
+                    inv.getCustomerName(), inv.getDescription(), 
+                    String.format("%.2f", inv.getAmount()),        
+                    String.format("%.2f", inv.getAmountPaid()),    
+                    String.format("%.2f", balance),                
+                    inv.getStatus(), inv.getPaidDate(), inv.getRemark()
+                };
+            tableModel.addRow(row);
+            totalCollected += inv.getAmountPaid();
+            totalOutstanding += balance;
+        }
+
+        totalPaidLabel.setText(String.format("Total Collected: RM %.2f  |  ", totalCollected));
+        totalUnpaidLabel.setText(String.format("Total Outstanding: RM %.2f", totalOutstanding));
+    }
+
+    private void setupTableColors() {
+        table.getColumnModel().getColumn(8).setCellRenderer(new javax.swing.table.DefaultTableCellRenderer() {
+                @Override
+                public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                    Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                    if ("Paid".equals(value)) {
+                        c.setForeground(new Color(0, 150, 0)); 
+                        c.setFont(c.getFont().deriveFont(Font.BOLD));
+                    } else if ("Partial".equals(value)) {
+                        c.setForeground(new Color(255, 120, 0)); 
+                        c.setFont(c.getFont().deriveFont(Font.BOLD));
+                    } else if ("Unpaid".equals(value)) {
+                        c.setForeground(Color.RED); 
+                        c.setFont(c.getFont().deriveFont(Font.BOLD));
+                    } else {
+                        c.setForeground(Color.BLACK); 
+                        c.setFont(table.getFont());
+                    }
+                    if (isSelected) c.setForeground(table.getSelectionForeground());
+                    return c;
+                }
+            });
+    }
+
+    private void applyZoom() {
+        updateComponentFont(frame, currentFontSize);
+        table.setRowHeight(currentFontSize + 10);
+        table.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, currentFontSize));
+
+        // 1. Scale the INVOICE title dynamically (Makes it 3x bigger than normal text!)
+        if (titleLabel != null) {
+            titleLabel.setFont(new Font("SansSerif", Font.BOLD, currentFontSize * 2)); 
+        }
+
+        // 2. Scale the Logo Image dynamically (Now supports 150x50 Rectangles!)
+        if (logoLabel != null && originalLogo != null) {
+
+            // Calculate how much we have zoomed in compared to the default size (14)
+            double scaleFactor = (double) currentFontSize / 14.0; 
+
+            // Apply that zoom multiplier to your specific 150x50 dimensions
+            int currentWidth = (int) (150 * scaleFactor);
+            int currentHeight = (int) (50 * scaleFactor);
+
+            Image scaledImage = originalLogo.getImage().getScaledInstance(currentWidth, currentHeight, Image.SCALE_SMOOTH);
+            logoLabel.setIcon(new ImageIcon(scaledImage));
+        }
+
+        frame.revalidate();
+        frame.repaint();
+    }
+
+    private void updateComponentFont(Component comp, int newSize) {
+        
+        if (comp == titleLabel || comp == logoLabel) {
+            return; 
+        }
+
+        Font currentFont = comp.getFont();
+        if (currentFont != null) {
+            comp.setFont(new Font(currentFont.getName(), currentFont.getStyle(), newSize));
+        }
+        if (comp instanceof Container) {
+            for (Component child : ((Container) comp).getComponents()) {
+                updateComponentFont(child, newSize); 
+            }
+        }
+    }
+    //dropdown for customer selection so no need to rewrite the same customer
+    private JComboBox<String> createCustomerDropdown(String preSelectedCustomer) {
+        JComboBox<String> box = new JComboBox<>();
+        for (String c : manager.getCustomers()) box.addItem(c);
+        box.addItem("+ Add New Customer");
+
+        if (preSelectedCustomer != null && !preSelectedCustomer.trim().isEmpty()) {
+            boolean found = false;
+            for (int i = 0; i < box.getItemCount(); i++) {
+                if (preSelectedCustomer.equals(box.getItemAt(i))) {
+                    box.setSelectedIndex(i);
+                    found = true;
+                    break;
+                }
+            }
+            //add one default customer to not crash the program if no customer found
+            if (!found) {
+                box.insertItemAt(preSelectedCustomer, 0); 
+                box.setSelectedItem(preSelectedCustomer);
+            }
+        }
+
+        box.addActionListener(e -> {
+                    if ("+ Add New Customer".equals(box.getSelectedItem())) {
+                        String newCust = JOptionPane.showInputDialog(frame, "Enter New Customer Name:");
+                        if (newCust != null && !newCust.trim().isEmpty()) {
+                            newCust = newCust.trim();
+                            manager.addCustomer(newCust); 
+                            box.removeItem("+ Add New Customer");
+                            box.addItem(newCust);
+                            box.addItem("+ Add New Customer");
+                            box.setSelectedItem(newCust); 
+                        } else {
+                            box.setSelectedIndex(0); 
+                        }
+                    }
+            });
+        return box;
+    }
+    //add calendar function
+    private JDatePickerImpl createVisualDatePicker(String existingDate) {
+        UtilDateModel model = new UtilDateModel();
+        if (existingDate != null && !existingDate.trim().isEmpty() && !existingDate.equals("-")) {
+            try {
+                String[] parts = existingDate.split("/");
+                int day = Integer.parseInt(parts[0]);
+                int month = Integer.parseInt(parts[1]) - 1; 
+                int year = Integer.parseInt(parts[2]);
+                model.setDate(year, month, day);
+                model.setSelected(true);
+            } catch (Exception e) {}
+        }
+        Properties p = new Properties();
+        p.put("text.today", "Today");
+        p.put("text.month", "Month");
+        p.put("text.year", "Year");
+        JDatePanelImpl datePanel = new JDatePanelImpl(model, p);
+        return new JDatePickerImpl(datePanel, new DateLabelFormatter()); 
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new InvoiceApp());
+    }
+    //for date formatting
+    class DateLabelFormatter extends AbstractFormatter {
+        private String datePattern = "dd/MM/yyyy";
+        private SimpleDateFormat dateFormatter = new SimpleDateFormat(datePattern);
+
+        @Override
+        public Object stringToValue(String text) throws ParseException {
+            return dateFormatter.parseObject(text);
+        }
+
+        @Override
+        public String valueToString(Object value) throws ParseException {
+            if (value != null) {
+                Calendar cal = (Calendar) value;
+                return dateFormatter.format(cal.getTime());
+            }
+            return "";
+        }
+    }
+    private double roundToTwoDecimals(double val) {
+        return Math.round(val * 100.0) / 100.0;
+    }
+}
+
