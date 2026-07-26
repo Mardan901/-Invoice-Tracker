@@ -16,6 +16,8 @@ import org.jdatepicker.impl.UtilDateModel;
 
 public class InvoiceApp {
     //UI Creation
+    TopPanel myTopPanel;
+    BottomPanel myBottomPanel;
     private JFrame frame;
     private JTable table;
     private DefaultTableModel tableModel;
@@ -37,62 +39,9 @@ public class InvoiceApp {
     }
     //adding GUI function & making UI look clean
     private void initializeUI() {
-        //Top panel
-        frame = new JFrame("JNG Resources - Invoice Tracker v2.9");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(1250, 600); 
-        frame.setLayout(new BorderLayout(10, 10));
-
-        JPanel topWrapper = new JPanel(new BorderLayout());
-        topWrapper.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 10)); 
-
-        JPanel controlsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        controlsPanel.add(new JLabel("Search: "));
-        JTextField searchField = new JTextField(15);
-        controlsPanel.add(searchField);
-
-        controlsPanel.add(new JLabel("  Filter: "));
-        String[] filters = {"Semua", "Paid", "Partial", "Unpaid"}; 
-        JComboBox<String> filterBox = new JComboBox<>(filters);
-        controlsPanel.add(filterBox);
-
-        JButton btnAdd = new JButton("+ Add Invoice");
-        JButton btnEdit = new JButton("Edit / Delete");
-        JButton btnPayment = new JButton("Update Payment");
-
-        controlsPanel.add(btnAdd);
-        controlsPanel.add(btnEdit);
-        controlsPanel.add(btnPayment);
-
-        topWrapper.add(controlsPanel, BorderLayout.WEST);
-
-        JPanel brandingPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
-        titleLabel = new JLabel("SUMMARY INVOICE OUT");
-        titleLabel.setForeground(new Color(40, 40, 100)); 
-
-        logoLabel = new JLabel();
-        //insert logo and put plaintext if no logo found
-        try {
-            File logoFile = new File("logo.jpg"); 
-            if (logoFile.exists()) {
-                originalLogo = new ImageIcon("logo.jpg"); 
-
-                Image scaledImage = originalLogo.getImage().getScaledInstance(150, 50, Image.SCALE_SMOOTH);
-                logoLabel.setIcon(new ImageIcon(scaledImage));
-
-            } else {
-                logoLabel.setText("[LOGO]"); 
-                logoLabel.setForeground(Color.GRAY);
-            }
-        } catch (Exception e) {
-            logoLabel.setText("[LOGO]");
-        }
-
-        brandingPanel.add(titleLabel);
-        brandingPanel.add(logoLabel);
-
-        topWrapper.add(brandingPanel, BorderLayout.EAST);
-        frame.add(topWrapper, BorderLayout.NORTH);
+        //Calling Top Panel
+        TopPanel myTopPanel = new TopPanel();
+        frame.add(myTopPanel, BorderLayout.NORTH);
 
         // Table setup
         String[] columns = {"Date", "Invoice ID", "Job No", "Customer", "Description", "Total (RM)", "Paid (RM)", "Balance (RM)", "Status", "Paid Date", "Remark"};
@@ -109,54 +58,38 @@ public class InvoiceApp {
         JScrollPane scrollPane = new JScrollPane(table);
         frame.add(scrollPane, BorderLayout.CENTER);
 
-        // Bottom Panel
-        JPanel bottomPanel = new JPanel(new BorderLayout());
-        JPanel zoomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton btnZoomOut = new JButton("➖"); 
-        JButton btnZoomIn = new JButton("➕");
-        btnZoomOut.setMargin(new Insets(2, 6, 2, 6));
-        btnZoomIn.setMargin(new Insets(2, 6, 2, 6));
-        zoomPanel.add(new JLabel("Zoom: "));
-        zoomPanel.add(btnZoomOut);
-        zoomPanel.add(btnZoomIn);
-        bottomPanel.add(zoomPanel, BorderLayout.WEST); 
-
-        JPanel totalsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        totalPaidLabel = new JLabel("Total Collected: RM 0.00  |  ");
-        totalPaidLabel.setForeground(new Color(0, 150, 0));
-        totalUnpaidLabel = new JLabel("Total Outstanding: RM 0.00");
-        totalUnpaidLabel.setForeground(Color.RED);
-        totalsPanel.add(totalPaidLabel);
-        totalsPanel.add(totalUnpaidLabel);
-        bottomPanel.add(totalsPanel, BorderLayout.EAST); 
-        frame.add(bottomPanel, BorderLayout.SOUTH);
+        BottomPanel myBottomPanel = new BottomPanel();
+        frame.add(myBottomPanel, BorderLayout.SOUTH);
 
         //Zoom Functionality
-        btnZoomIn.addActionListener(e -> { 
-                    if (currentFontSize < 28) 
-                    { currentFontSize += 2; applyZoom();
-                    } });
-        btnZoomOut.addActionListener(e -> { 
-                    if (currentFontSize > 10) 
-                    { currentFontSize -= 2; applyZoom();
-                    } });
+        myBottomPanel.getBtnZoomIn().addActionListener(e -> { 
+                    if (currentFontSize < 28) { 
+                        currentFontSize += 2; applyZoom();
+                    } 
+            });
 
-        btnAdd.addActionListener(e -> showAddInvoiceDialog());
-        btnEdit.addActionListener(e -> showEditInvoiceDialog());
-        btnPayment.addActionListener(e -> showPaymentDialog());
+        myBottomPanel.getBtnZoomOut().addActionListener(e -> { 
+                    if (currentFontSize > 10) { 
+                        currentFontSize -= 2; applyZoom();
+                    } 
+            });
 
-        searchField.addKeyListener(new KeyAdapter() {
+        myTopPanel.getButtonPanel().getBtnAdd().addActionListener(e -> showAddInvoiceDialog());
+        myTopPanel.getButtonPanel().getBtnEdit().addActionListener(e -> showEditInvoiceDialog());
+        myTopPanel.getButtonPanel().getBtnPayment().addActionListener(e -> showPaymentDialog());
+
+        myTopPanel.getSearchField().addKeyListener(new KeyAdapter() {
                 @Override
                 public void keyReleased(KeyEvent e) {
-                    String text = searchField.getText();
+                    String text = myTopPanel.getSearchField().getText();
                     if (text.trim().length() == 0) sorter.setRowFilter(null);
                     else sorter.setRowFilter(RowFilter.regexFilter("(?i)" + text));
                 }
             });
 
-        filterBox.addActionListener(e -> {
-                    if (filterBox.getSelectedIndex() == 0) sorter.setRowFilter(null);
-                    else sorter.setRowFilter(RowFilter.regexFilter((String) filterBox.getSelectedItem()));
+        myTopPanel.getFilterBox().addActionListener(e -> {
+                    if (myTopPanel.getFilterBox().getSelectedIndex() == 0) sorter.setRowFilter(null);
+                    else sorter.setRowFilter(RowFilter.regexFilter((String) myTopPanel.getFilterBox().getSelectedItem()));
             });
 
         frame.setVisible(true);
@@ -289,11 +222,11 @@ public class InvoiceApp {
             };
 
         for (Component[] row : fields) {
-            
+
             JPanel rowPanel = new JPanel(new BorderLayout(5, 5)) {
                     @Override
                     public Dimension getMaximumSize() {
-                        
+
                         return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
                     }
                 };
@@ -392,11 +325,11 @@ public class InvoiceApp {
             };
 
         for (Component[] row : fields) {
-            
+
             JPanel rowPanel = new JPanel(new BorderLayout(5, 5)) {
                     @Override
                     public Dimension getMaximumSize() {
-                        
+
                         return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
                     }
                 };
@@ -457,8 +390,8 @@ public class InvoiceApp {
             totalOutstanding += balance;
         }
 
-        totalPaidLabel.setText(String.format("Total Collected: RM %.2f  |  ", totalCollected));
-        totalUnpaidLabel.setText(String.format("Total Outstanding: RM %.2f", totalOutstanding));
+        myBottomPanel.getTotalPaidLabel().setText(String.format("Total Collected: RM %.2f  |  ", totalCollected));
+        myBottomPanel.getTotalUnpaidLabel().setText(String.format("Total Outstanding: RM %.2f", totalOutstanding));
     }
 
     private void setupTableColors() {
@@ -514,7 +447,7 @@ public class InvoiceApp {
     }
 
     private void updateComponentFont(Component comp, int newSize) {
-        
+
         if (comp == titleLabel || comp == logoLabel) {
             return; 
         }
