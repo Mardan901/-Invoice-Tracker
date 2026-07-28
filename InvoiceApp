@@ -4,15 +4,6 @@ import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.io.File;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Properties;
-import javax.swing.JFormattedTextField.AbstractFormatter;
-import org.jdatepicker.impl.JDatePanelImpl;
-import org.jdatepicker.impl.JDatePickerImpl;
-import org.jdatepicker.impl.UtilDateModel;
 
 public class InvoiceApp {
     //UI Creation
@@ -24,11 +15,7 @@ public class InvoiceApp {
     private DefaultTableModel tableModel;
     private TableRowSorter<DefaultTableModel> sorter;
     private InvoiceManager manager;
-    private JLabel totalPaidLabel, totalUnpaidLabel;
-
-    private JLabel titleLabel;
-    private JLabel logoLabel;
-    private ImageIcon originalLogo; 
+    private JLabel totalPaidLabel, totalUnpaidLabel; 
 
     private int currentFontSize = 14; 
     //calling methods inside constructor to avoid static error
@@ -39,8 +26,8 @@ public class InvoiceApp {
         refreshTableData();
         applyZoom(); 
     }
-    
-        public static void main(String[] args) {
+
+    public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new InvoiceApp());
     }
     //adding GUI function & making UI look clean
@@ -158,34 +145,11 @@ public class InvoiceApp {
         table.setRowHeight(currentFontSize + 10);
         table.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, currentFontSize));
 
-        // 1. Scale the INVOICE title dynamically (Makes it 3x bigger than normal text!)
-        if (titleLabel != null) {
-            titleLabel.setFont(new Font("SansSerif", Font.BOLD, currentFontSize * 2)); 
-        }
-
-        // 2. Scale the Logo Image dynamically (Now supports 150x50 Rectangles!)
-        if (logoLabel != null && originalLogo != null) {
-
-            // Calculate how much we have zoomed in compared to the default size (14)
-            double scaleFactor = (double) currentFontSize / 14.0; 
-
-            // Apply that zoom multiplier to your specific 150x50 dimensions
-            int currentWidth = (int) (150 * scaleFactor);
-            int currentHeight = (int) (50 * scaleFactor);
-
-            Image scaledImage = originalLogo.getImage().getScaledInstance(currentWidth, currentHeight, Image.SCALE_SMOOTH);
-            logoLabel.setIcon(new ImageIcon(scaledImage));
-        }
-
         frame.revalidate();
         frame.repaint();
     }
 
     private void updateComponentFont(Component comp, int newSize) {
-
-        if (comp == titleLabel || comp == logoLabel) {
-            return; 
-        }
 
         Font currentFont = comp.getFont();
         if (currentFont != null) {
@@ -209,7 +173,7 @@ public class InvoiceApp {
     public int getCurrentFontSize() { 
         return currentFontSize; 
     }
-    
+
     public JTable getTable() { 
         return table;
     }
