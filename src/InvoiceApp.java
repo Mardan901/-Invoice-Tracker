@@ -34,7 +34,7 @@ public class InvoiceApp {
     private void initializeUI() {
         //Calling Top Panel
         frame = new JFrame("JNG Resources - Invoice Tracker v2.9");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         frame.setSize(1250, 600); 
         frame.setLayout(new BorderLayout(10, 10));
         myTopPanel = new TopPanel();
