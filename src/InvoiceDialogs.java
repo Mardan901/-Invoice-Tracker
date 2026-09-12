@@ -83,14 +83,37 @@ public class InvoiceDialogs {
         btnCancel.addActionListener(e -> dialog.dispose());
 
         btnSave.addActionListener(e -> {
+                    String dateText = datePicker.getJFormattedTextField().getText();
+
+                    // 1. Check if any critical field is blank
+                    boolean isIncomplete = idPart1.getText().trim().isEmpty() || 
+                        idPart2.getText().trim().isEmpty() || 
+                        amountField.getText().trim().isEmpty() || 
+                        dateText == null || dateText.trim().isEmpty();
+
+                    // 2. If incomplete, ask the user what to do
+                    if (isIncomplete) {
+                        int choice = JOptionPane.showConfirmDialog(dialog, 
+                                "Some fields are incomplete. Are you sure you want to save anyway?", 
+                                "Incomplete Data Warning", 
+                                JOptionPane.YES_NO_OPTION, 
+                                JOptionPane.WARNING_MESSAGE);
+
+                        if (choice != JOptionPane.YES_OPTION) {
+                            return; // User clicked "No", stop saving so they can fill data
+                        }
+                    }
+
                     try {
-                        double amt = roundToTwoDecimals(Double.parseDouble(amountField.getText()));
+                        // Default to 0.0 if they forced a save while the amount box was blank
+                        double amt = amountField.getText().trim().isEmpty() ? 0.0 : 
+                            roundToTwoDecimals(Double.parseDouble(amountField.getText()));
+
                         String fullInvoiceId = "JNG" + idPart1.getText().trim() + "/INV/" + idPart2.getText().trim();
                         String selectedCustomer = nameField.getSelectedItem().toString();
-                        String finalDateString = datePicker.getJFormattedTextField().getText();
 
                         mainApp.getManager().addNewInvoice(
-                            finalDateString, fullInvoiceId, jobNoField.getText(), 
+                            dateText, fullInvoiceId, jobNoField.getText(), 
                             selectedCustomer, descField.getText(), amt, remarkField.getText()
                         );
 
@@ -275,14 +298,55 @@ public class InvoiceDialogs {
         btnCancel.addActionListener(e -> dialog.dispose());
 
         btnSave.addActionListener(e -> {
+                    String dateText = datePicker.getJFormattedTextField().getText();
+                    String existingPaidDateStr = table.getValueAt(selectedRow, 9).toString(); // Get Paid Date from index 9
+
+                    boolean isIncomplete = idField.getText().trim().isEmpty() || 
+                        amountField.getText().trim().isEmpty() || 
+                        paidField.getText().trim().isEmpty() ||
+                        dateText == null || dateText.trim().isEmpty();
+
+                    if (isIncomplete) {
+                        int choice = JOptionPane.showConfirmDialog(dialog, 
+                                "Some fields are incomplete. Are you sure you want to save anyway?", 
+                                "Incomplete Data Warning", 
+                                JOptionPane.YES_NO_OPTION, 
+                                JOptionPane.WARNING_MESSAGE);
+
+                        if (choice != JOptionPane.YES_OPTION) {
+                            return; 
+                        }
+                    }
+
+                    // --- NEW CHRONOLOGICAL VALIDATION ---
+                    if (existingPaidDateStr != null && !existingPaidDateStr.equals("-") && !existingPaidDateStr.trim().isEmpty()) {
+                        try {
+                            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+                            java.util.Date newInvDate = sdf.parse(dateText);
+                            java.util.Date existingPayDate = sdf.parse(existingPaidDateStr);
+
+                            if (newInvDate.after(existingPayDate)) {
+                                JOptionPane.showMessageDialog(dialog, 
+                                    "The Invoice Date cannot be set later than the existing Payment Date (" + existingPaidDateStr + ").", 
+                                    "Invalid Chronology", 
+                                    JOptionPane.ERROR_MESSAGE);
+                                return; // Stop saving
+                            }
+                        } catch (Exception ex) {
+                            System.out.println("Date parsing error for validation.");
+                        }
+                    }
+
                     try {
-                        double amt = roundToTwoDecimals(Double.parseDouble(amountField.getText()));
-                        double paid = roundToTwoDecimals(Double.parseDouble(paidField.getText()));
+                        double amt = amountField.getText().trim().isEmpty() ? 0.0 : 
+                            roundToTwoDecimals(Double.parseDouble(amountField.getText()));
+                        double paid = paidField.getText().trim().isEmpty() ? 0.0 : 
+                            roundToTwoDecimals(Double.parseDouble(paidField.getText()));
+
                         String selectedCustomer = nameField.getSelectedItem().toString();
-                        String finalDateString = datePicker.getJFormattedTextField().getText();
 
                         mainApp.getManager().updateInvoice(
-                            oldId, finalDateString, idField.getText(), jobNoField.getText(), 
+                            oldId, dateText, idField.getText(), jobNoField.getText(), 
                             selectedCustomer, descField.getText(), amt, paid, remarkField.getText()
                         );
                         mainApp.refreshTableData();
@@ -380,10 +444,53 @@ public class InvoiceDialogs {
         btnCancel.addActionListener(e -> dialog.dispose());
 
         btnSave.addActionListener(e -> {
+                    String dateString = datePicker.getJFormattedTextField().getText();
+                    String invoiceDateStr = table.getValueAt(selectedRow, 0).toString(); // Get original invoice date
+
+                    // 1. Check if the amount or date is empty/missing
+                    boolean isIncomplete = payField.getText().trim().isEmpty() || 
+                        dateString == null || 
+                        dateString.trim().isEmpty();
+
+                    if (isIncomplete) {
+                        int choice = JOptionPane.showConfirmDialog(dialog, 
+                                "Payment amount or date is missing/incomplete. Are you sure you want to save anyway?", 
+                                "Incomplete Data Warning", 
+                                JOptionPane.YES_NO_OPTION, 
+                                JOptionPane.WARNING_MESSAGE);
+
+                        if (choice != JOptionPane.YES_OPTION) {
+                            return; 
+                        }
+                    }
+
+                    // 2. --- NEW CHRONOLOGICAL VALIDATION ---
+                    if (dateString != null && !dateString.trim().isEmpty() && !dateString.equals("-")) {
+                        try {
+                            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+                            java.util.Date invDate = sdf.parse(invoiceDateStr);
+                            java.util.Date payDate = sdf.parse(dateString);
+
+                            if (payDate.before(invDate)) {
+                                JOptionPane.showMessageDialog(dialog, 
+                                    "Payment date cannot be earlier than the invoice date (" + invoiceDateStr + ").", 
+                                    "Invalid Chronology", 
+                                    JOptionPane.ERROR_MESSAGE);
+                                return; // Stop saving
+                            }
+                        } catch (Exception ex) {
+                            System.out.println("Date parsing error for validation.");
+                        }
+                    }
+
+                    // 3. Save Data
                     try {
-                        double newPaid = roundToTwoDecimals(Double.parseDouble(payField.getText()));
-                        String dateString = datePicker.getJFormattedTextField().getText();
-                        mainApp.getManager().updatePayment(targetId, newPaid, dateString.trim().isEmpty() ? "-" : dateString);
+                        double newPaid = payField.getText().trim().isEmpty() ? 0.0 : 
+                            roundToTwoDecimals(Double.parseDouble(payField.getText()));
+
+                        String finalDate = (dateString == null || dateString.trim().isEmpty()) ? "-" : dateString.trim();
+
+                        mainApp.getManager().updatePayment(targetId, newPaid, finalDate);
                         mainApp.refreshTableData();
                         dialog.dispose(); 
                     } catch (NumberFormatException ex) {
